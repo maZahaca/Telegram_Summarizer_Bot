@@ -1,10 +1,12 @@
+import os
 import telebot
 import pandas as pd
 import datetime
 from transformers import pipeline
+import json
 
-# Replace with your bot token
-TOKEN = "YOR_TELEGRAM_BOT_TOKEN"
+# Read the bot token from the environment variable
+TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 bot = telebot.TeleBot(TOKEN, parse_mode="Markdown")
 
@@ -42,7 +44,6 @@ def send_welcome(message):
 # Command to summarize messages based on selected time range
 @bot.message_handler(commands=["summarize"])
 def summarize_messages(message):
-    user_id = message.from_user.id
     text = message.text.split()
 
     if len(text) != 2 or text[1] not in TIME_INTERVALS:
@@ -61,18 +62,23 @@ def summarize_messages(message):
         df = pd.read_csv(LOG_FILE)
         df["date"] = pd.to_datetime(df["date"])
 
-        # Filter messages for the user within the time range
-        user_messages = df[(df["user_id"] == user_id) & (df["date"] >= start_time)]
+        # Filter messages from the group within the time range
+        group_id = message.chat.id
+        group_messages = df[
+            (df["chat_id"] == group_id) & (df["date"] >= start_time)
+        ] if "chat_id" in df.columns else df[df["date"] >= start_time]
 
-        if user_messages.empty:
+        if group_messages.empty:
             bot.reply_to(message, "No messages found in the selected time range.")
             return
 
-        # Combine messages into one text block for summarization
-        messages_text = " ".join(user_messages["message"].tolist())
+        # Format messages for summarization: "username: message"
+        messages_text = "\n".join(
+            f"{row['username']}: {row['message']}" for _, row in group_messages.iterrows()
+        )
 
         # Summarize messages (limit input size to avoid errors)
-        if len(messages_text) > 1024:  # Adjusting for token limits
+        if len(messages_text) > 1024:
             messages_text = messages_text[:1024]
 
         summary = summarizer(messages_text, max_length=100, min_length=30, do_sample=False)[0]["summary_text"]
@@ -91,16 +97,17 @@ def log_messages(message):
         username = message.from_user.username or "Unknown"
         text = message.text
         date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
-        print(f"Logging message: {username} ({user_id}) - {text}")  # Debugging
+        chat_id = message.chat.id
 
         # Save message to CSV
-        df = pd.DataFrame([[user_id, username, text, date]], columns=["user_id", "username", "message", "date"])
+        df = pd.DataFrame([[user_id, username, text, date, chat_id]], columns=["user_id", "username", "message", "date", "chat_id"])
 
         try:
             existing_df = pd.read_csv(LOG_FILE)
             df = pd.concat([existing_df, df], ignore_index=True)
         except FileNotFoundError:
+            pass
+        except pd.errors.EmptyDataError:
             pass
 
         df.to_csv(LOG_FILE, index=False)

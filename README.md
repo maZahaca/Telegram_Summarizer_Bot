@@ -31,12 +31,18 @@ I often miss out on reading all the messages in my group chats due to a busy sch
    ```
 
 3. **Set up the bot:**
-   - Replace `YOUR_BOT_TOKEN` in `telegram_bot.py` with your Telegram Bot Token.
+   - create file .env from .env.example and fill TELEGRAM_BOT_TOKEN with your real Telegram Bot Token.
 
 4. **Run the bot:**
    ```bash
    python telegram_bot.py
    ```
+
+# Usage in Docker
+To run the bot in a Docker container, follow these steps:
+```bash
+docker-compose up --build
+```
 
 ## Requirements
 - Python 3.7+
